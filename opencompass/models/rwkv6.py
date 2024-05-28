@@ -1,11 +1,13 @@
 from typing import Dict, List, Optional, Union
 from concurrent.futures import ThreadPoolExecutor
 import threading
+import os
+os.environ["RWKV_JIT_ON"] = '1'
+os.environ["RWKV_CUDA_ON"] = '1'
 from rwkv.utils import PIPELINE, PIPELINE_ARGS
 from rwkv.model import RWKV
 import torch
 import numpy as np
-import os
 
 from .base import BaseModel, LMTemplateParser
 from opencompass.models.base import BaseModel
@@ -16,7 +18,6 @@ from rwkv.rwkv_tokenizer import TRIE_TOKENIZER
 
 
 PromptType = Union[PromptList, str]
-
 
 class RWKV6(BaseModel):
     """Mixtral model wrapper https://github.com/open-compass/MixtralKit.

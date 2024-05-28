@@ -9,15 +9,17 @@ from opencompass.models import RWKV6
 # git clone https://github.com/facebookresearch/llama.git
 # cd llama
 # pip install -e .
+generation_kwargs={'temperature':1.0,'top_p':0.85,'top_k':0,'alpha_frequency':0.2,'alpha_presence':0.2}
 models = [
     dict(
         abbr='rwkv-1.6b',
         type=RWKV6,
         path='/home/rwkv/JL/model/RWKV-x060-World-1B6-v2.1-20240328-ctx4096.pth',
         tokenizer_path='/home/rwkv/JL/opencompass/opencompass/models/rwkv/rwkv_vocab_v20230424.txt',
-        max_out_len=100,
         max_seq_len=2048,
+        max_batch_size=1,
         batch_size=1,
-        run_cfg=dict(num_gpus=1, num_procs=1),
+        num_gpus=1,
+        generation_kwargs=generation_kwargs,
     ),
 ]
