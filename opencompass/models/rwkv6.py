@@ -1,143 +1,176 @@
-from opencompass.models.base import BaseModel
-########################################################################################################
-# The RWKV Language Model - https://github.com/BlinkDL/RWKV-LM
-########################################################################################################
-#
-# pip install rwkv lm_eval --upgrade
-#
-import os, sys, types, json, math, time
-import numpy as np
-np.set_printoptions(precision=4, suppress=True, linewidth=200)
 from typing import Dict, List, Optional, Union
+from concurrent.futures import ThreadPoolExecutor
+import threading
+from rwkv.utils import PIPELINE, PIPELINE_ARGS
+from rwkv.model import RWKV
 import torch
-torch.backends.cudnn.benchmark = True
-torch.backends.cudnn.allow_tf32 = True
-torch.backends.cuda.matmul.allow_tf32 = True
-from torch.nn import functional as F
+import numpy as np
+import os
+
+from .base import BaseModel, LMTemplateParser
+from opencompass.models.base import BaseModel
 from opencompass.models.base_api import APITemplateParser
 from opencompass.utils.logging import get_logger
+from opencompass.utils.prompt import PromptList
+from rwkv.rwkv_tokenizer import TRIE_TOKENIZER
 
 
-os.environ["RWKV_JIT_ON"] = '1'
-os.environ["RWKV_CUDA_ON"] = '1'
-
-########################################################################################################
-
-# MODEL_NAME = "/fsx/BlinkDL/HF-MODEL/rwkv-5-world/RWKV-5-World-1.5B-v2-OnlyForTest_14%_trained-20231001-ctx4096"
-
-# print(f'Loading model - {MODEL_NAME}')
-# model = RWKV(model=MODEL_NAME, strategy='cuda fp16', verbose=False)
-# pipeline = PIPELINE(model, "rwkv_vocab_v20230424")
-
-class TokenizerWrapper:
-    def __init__(self, tokenizer):
-        self.tokenizer = tokenizer
-        self.eos_token_id = 0
-
-    def encode(self, string: str, add_special_tokens=False):
-        return self.tokenizer.encode(string)
-
-    def decode(self, tokens):
-        return self.tokenizer.decode(tokens)
-
+PromptType = Union[PromptList, str]
 
 
 class RWKV6(BaseModel):
+    """Mixtral model wrapper https://github.com/open-compass/MixtralKit.
+
+    Args:
+        path (str): path to the model directory
+        max_seq_len (int): max sequence length
+        max_batch_size (int): max batch size
+        tokenizer_only (bool): whether to load tokenizer only
+        tokenizer_path (str): path to the tokenizer directory
+        meta_template (dict): meta template for the model
+    """
+
     def __init__(
         self,
         path: str,
         max_seq_len: int = 2048,
-        max_batch_size: int = 16,
+        max_batch_size: int = 4,
         tokenizer_only: bool = False,
         tokenizer_path: Optional[str] = None,
         meta_template: Optional[Dict] = None,
+        num_gpus: int = 1,
+        generation_kwargs: Optional[Dict] = None
     ):  # noqa
-        # if tokenizer_only:
-        #     self.pipeline = PIPELINE(path, tokenizer_path)
-        # else:
-        self._load_model(path=path,tokenizer_path=tokenizer_path)
-        self.template_parser = APITemplateParser(meta_template)
+        if tokenizer_only:
+            self._load_tokenizer(tokenizer_path=tokenizer_path)
+        else:
+            self._load_model(path=path,
+                             max_seq_len=max_seq_len,
+                             max_batch_size=max_batch_size,
+                             tokenizer_path=tokenizer_path)
+        self.max_seq_len = max_seq_len
+        self.template_parser = LMTemplateParser(meta_template)
         self.logger = get_logger()
+        self.args = PIPELINE_ARGS(temperature = generation_kwargs["temperature"], top_p = generation_kwargs["top_p"], top_k = generation_kwargs["top_k"], # top_k = 0 then ignore
+                    alpha_frequency = generation_kwargs["alpha_frequency"],
+                    alpha_presence = generation_kwargs["alpha_presence"],
+                    alpha_decay = 0.996, # gradually decay the penalty
+                    token_ban = [0], # ban the generation of some tokens
+                    token_stop = [], # stop generation whenever you see any token here
+                    chunk_len = 256) # split input into chunks to save VRAM (shorter -> slower)
 
     def _load_model(self,
                     path: str,
+                    max_seq_len: int,
+                    max_batch_size: int,
                     tokenizer_path: Optional[str] = None):
-        
-        from rwkv.model import RWKV
-        from rwkv.utils import PIPELINE
-        self.model = RWKV(model=path, strategy='cuda fp16', verbose=False)
-        self.pipeline = PIPELINE(path, tokenizer_path)
-        self.tokenizer = TokenizerWrapper(self.pipeline.tokenizer)
+        self.model = RWKV(model=path, strategy="cuda fp16")
+        self.pipeline = PIPELINE(self.model, "rwkv_vocab_v20230424")
+        self.tokenizer = self.pipeline
 
-    def get_token_len(self, prompt: str) -> int:
-        """Get lengths of the tokenized strings."""
-        tokens = self.tokenizer.encode(prompt)
-        return len(tokens)
+    def _load_tokenizer(self, tokenizer_path: str):
+        self.tokenizer = TRIE_TOKENIZER(tokenizer_path)
 
     def generate(self, inputs: List[str], max_out_len: int) -> List[str]:
-        """Generate results given a list of inputs. """
-        all_tokens = []
-        out_last = 0
-        out_str = ''
-        state = None
-        for i in range(max_out_len):
+        results = []
+        for input in inputs:
+            generation_tokens = self.pipeline.generate(input, token_count=max_out_len, args=self.args)
+        results.append(generation_tokens)
+        return results
+    
+    def my_print(s):
+        print(s, end='', flush=True)
 
-            # forward & adjust prob.
-            tokens = self.tokenizer.encode(inputs[0]) if i == 0 else [token]
-            while len(tokens) > 0:
-                out, state = self.model.forward(tokens[:512], state)
-                tokens = tokens[512:]
-                
-            # for n in args.token_ban:
-            #     out[n] = -float('inf')
-     
-            # sampler
-            token = self.pipeline.sample_logits(out, temperature=1, top_p=0.3)
-            # if token in args.token_stop:
-            #     break
-            all_tokens += [token]
+    # def _generate(self,
+    #              inputs,
+    #              max_out_len: int = 512,
+    #              temperature: float = 0.6) -> str:
+    #     """Generate response from input prompt.
 
-            
-            ttt = self.tokenizer.decode([token])
-            www = 1
-            if ttt in ' \t0123456789':
-                www = 0
-      
-            # output
-            tmp = self.tokenizer.decode(all_tokens[out_last:])
-            if '\ufffd' not in tmp: # is valid utf-8 string?
-                # if callback:
-                #     callback(tmp)
-                out_str += tmp
-                out_last = i + 1
-        return [out_str]
+    #     Args:
+    #         inputs (list): input prompt
+    #         max_out_len (int): max output length
+    #         temperature (float): temperature for sampling
+    #     """
+    #     dialogs = []
+    #     for input in inputs:
+    #         assert isinstance(input, (str, PromptList))
+    #         if isinstance(input, str):
+    #             dialog = [{'role': 'user', 'content': input}]
+    #         else:
+    #             dialog = []
+    #             for item in input:
+    #                 msg = {'content': item['prompt']}
+    #                 if item['role'].upper() == 'HUMAN':
+    #                     msg['role'] = 'user'
+    #                 elif item['role'].upper() == 'BOT':
+    #                     msg['role'] = 'assistant'
+    #                 elif item['role'].upper() == 'SYSTEM':
+    #                     msg['role'] = 'system'
+    #                 else:
+    #                     raise ValueError(f'Unknown role: {item["role"]}')
+    #                 dialog.append(msg)
+    #         dialogs.append(dialog)
 
-    def get_ppl(self,
-                inputs: List[str],
-                mask_length: Optional[List[int]] = None) -> List[float]:
-        """Get perplexity scores given a list of inputs."""
+    #     try:
+    #         results = self.generator.chat_completion(
+    #             dialogs,  # type: ignore
+    #             max_gen_len=max_out_len,
+    #             temperature=temperature,
+    #         )
+    #         return [r['generation']['content'] for r in results]
+    #     except AssertionError:
+    #         self.logger.warning('Batched data max token limit exceeded, '
+    #                             'try to run one by one...')
+
+    #     results = []
+    #     for dialog in dialogs:
+    #         try:
+    #             result = self.generator.chat_completion(
+    #                 [dialog],  # type: ignore
+    #                 max_gen_len=max_out_len,
+    #                 temperature=temperature,
+    #             )[0]
+    #             results.append(result['generation']['content'])
+    #         except AssertionError:
+    #             results.append('')
+    #     return results
+
+    def get_ppl(self, inputs: List[str], mask_length: Optional[List[int]] = None) -> List[float]:
         assert mask_length is None, 'mask_length is not supported'
         bsz = len(inputs)
-        # params = self.model.params
         # assert bsz <= params.max_batch_size, (bsz, params.max_batch_size)
-        # tokenize
-        prompt_tokens = [self.tokenizer.encode(x) for x in inputs]
+
+        # Tokenize the inputs
+        prompt_tokens = [self.pipeline.encode(x) for x in inputs]
         max_prompt_size = max([len(t) for t in prompt_tokens])
-        total_len = max_prompt_size
-        tokens = torch.zeros((bsz, total_len)).long()
-        for k, t in enumerate(prompt_tokens):
-            num_token = min(total_len, len(t))
-            tokens[k, :num_token] = torch.tensor(t[-num_token:]).long()
-        # forward
-        outputs,_ = self.model.forward(tokens[0],None,full_output=True)
-        # compute ppl
-        shift_logits = outputs[..., :-1, :].contiguous().float()
-        shift_labels = tokens[..., 1:].contiguous()
-        shift_logits = shift_logits.view(-1, shift_logits.size(-1))
-        shift_labels = shift_labels.view(-1)
-        loss_fct = torch.nn.CrossEntropyLoss(reduction='none', ignore_index=0)
-        loss = loss_fct(shift_logits, shift_labels.cuda()).view(bsz, -1)
-        lens = (tokens != 0).sum(-1).cpu().numpy()
-        ce_loss = loss.sum(-1).cpu().detach().numpy() / lens
-        torch.cuda.empty_cache()
-        return ce_loss
+        total_len = min(self.max_seq_len, max_prompt_size)
+
+        ce_loss_list = []
+
+        for i in range(bsz):
+            tokens = torch.zeros((1, total_len)).cuda().long()  # Batch size of 1 for each input
+            num_token = min(total_len, len(prompt_tokens[i]))
+            tokens[0, :num_token] = torch.tensor(prompt_tokens[i][-num_token:]).long()
+
+            # Generate forward & adjust prob.
+            all_tokens = tokens[0].tolist()
+            out, _ = self.model.forward(all_tokens, None, full_output=True)
+
+            out = out.unsqueeze(0)  # Add batch dimension
+
+            # Compute ppl
+            shift_logits = out[..., :-1, :].contiguous().float()
+            shift_labels = tokens[..., 1:].contiguous()
+            shift_logits = shift_logits.view(-1, shift_logits.size(-1)) # 将 logits 张量从三维展平为二维，以便与目标标签进行对齐并计算交叉熵损失。
+            shift_labels = shift_labels.view(-1)
+            loss_fct = torch.nn.CrossEntropyLoss(reduction='none', ignore_index=0)
+            loss = loss_fct(shift_logits, shift_labels).view(1, -1)
+            lens = (tokens != 0).sum(-1).cpu().numpy()
+            ce_loss = loss.sum(-1).cpu().detach().numpy() / lens
+            ce_loss_list.append(ce_loss[0])
+
+        return np.array(ce_loss_list)
+
+    def get_token_len(self, prompt: str) -> int:
+        return len(self.pipeline.encode(prompt))
