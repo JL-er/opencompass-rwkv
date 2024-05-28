@@ -170,7 +170,7 @@ class RWKV6(BaseModel):
             lens = (tokens != 0).sum(-1).cpu().numpy()
             ce_loss = loss.sum(-1).cpu().detach().numpy() / lens
             ce_loss_list.append(ce_loss[0])
-
+        torch.cuda.empty_cache()
         return np.array(ce_loss_list)
 
     def get_token_len(self, prompt: str) -> int:
