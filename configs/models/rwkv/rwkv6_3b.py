@@ -12,10 +12,10 @@ from opencompass.models import RWKV6
 generation_kwargs={'temperature':1.0,'top_p':0.85,'top_k':0,'alpha_frequency':0.2,'alpha_presence':0.2}
 models = [
     dict(
-        abbr='rwkv-1.6b',
+        abbr='rwkv-3b',
         type=RWKV6,
         path='/home/rwkv/JL/model/RWKV-x060-World-3B-v2.1-20240417-ctx4096.pth',
-        tokenizer_path='/home/rwkv/JL/opencompass/opencompass/models/rwkv/rwkv_vocab_v20230424.txt',
+        tokenizer_path='rwkv_vocab_v20230424.txt',
         max_seq_len=2048,
         max_batch_size=1,
         batch_size=1,
