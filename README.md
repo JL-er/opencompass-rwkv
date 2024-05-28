@@ -114,8 +114,8 @@ Below are the steps for quick installation and datasets preparation.
 ```bash
 conda create --name opencompass python=3.10 pytorch torchvision pytorch-cuda -c nvidia -c pytorch -y
 conda activate opencompass
-git clone https://github.com/open-compass/opencompass opencompass
-cd opencompass
+git clone https://github.com/JL-er/opencompass-rwkv.git
+cd opencompass-rwkv
 pip install -e .
 ```
 
@@ -124,8 +124,8 @@ pip install -e .
 ```bash
 conda create -n opencompass python=3.10 pytorch torchvision torchaudio cpuonly -c pytorch -y
 conda activate opencompass
-git clone https://github.com/open-compass/opencompass opencompass
-cd opencompass
+git clone https://github.com/JL-er/opencompass-rwkv.git
+cd opencompass-rwkv
 pip install -e .
 # also please install requirements packages via `pip install -r requirements/api.txt` for API models if needed.
 ```
@@ -147,7 +147,7 @@ Some third-party features, like Humaneval and Llama, may require additional step
 After ensuring that OpenCompass is installed correctly according to the above steps and the datasets are prepared, you can evaluate the performance of the LLaMA-7b model on the MMLU and C-Eval datasets using the following command:
 
 ```bash
-python run.py --models hf_llama_7b --datasets mmlu_ppl ceval_ppl
+python run.py --models rwkv6_7b --datasets mmlu_ppl ceval_ppl
 ```
 
 OpenCompass has predefined configurations for many models and datasets. You can list all available model and dataset configurations using the [tools](./docs/en/tools.md#list-configs).
@@ -156,7 +156,7 @@ OpenCompass has predefined configurations for many models and datasets. You can 
 # List all configurations
 python tools/list_configs.py
 # List all configurations related to llama and mmlu
-python tools/list_configs.py llama mmlu
+python tools/list_configs.py rwkv mmlu
 ```
 
 You can also evaluate other HuggingFace models via command line. Taking LLaMA-7b as an example:
