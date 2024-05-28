@@ -72,7 +72,6 @@ class OpenICLInferTask(BaseTask):
             else:
                 self.model = build_model_from_cfg(model_cfg)
                 cur_model = self.model
-
             for dataset_cfg in dataset_cfgs:
                 self.model_cfg = model_cfg
                 self.dataset_cfg = dataset_cfg

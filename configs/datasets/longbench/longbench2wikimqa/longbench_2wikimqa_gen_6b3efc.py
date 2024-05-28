@@ -15,7 +15,7 @@ LongBench_2wikimqa_infer_cfg = dict(
         type=PromptTemplate,
         template=dict(
             round=[
-                dict(role='HUMAN', prompt='Answer the question based on the given passages. Only give me the answer and do not output any other words.\n\nThe following are given passages.\n{context}\n\nAnswer the question based on the given passages. Only give me the answer and do not output any other words.\n\nQuestion: {input}\nAnswer:'),
+                dict(role='HUMAN', prompt='User: Answer the question based on the given passages. Only give me the answer and do not output any other words.\n\nThe following are given passages.\n{context}\n\nAnswer the question based on the given passages. Only give me the answer and do not output any other words.\n\nQuestion: {input}\n\nAssistant:'),
             ], )),
     retriever=dict(type=ZeroRetriever),
     inferencer=dict(type=GenInferencer, max_out_len=32)

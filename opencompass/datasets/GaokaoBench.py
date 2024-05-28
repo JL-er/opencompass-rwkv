@@ -91,51 +91,34 @@ class GaokaoBenchEvaluator(BaseEvaluator):
         ]:
             return {'score': 0}
         elif self.question_type == 'multi_choice':
-            details = {}
             correct_score, total_score = 0, 0
-            for index, (pred, refr) in enumerate(zip(predictions, references)):
+            for pred, refr in zip(predictions, references):
                 pred = self.do_predictions_postprocess(pred)
                 pred = self.ensure_same_length(pred, refr)
-                is_corrects = []
                 for p, r in zip(pred, refr):
                     if p == r:
                         correct_score += 2
-                        is_corrects.append(True)
                     else:
                         for i in p:
                             if i not in r:
                                 break
                         else:
                             correct_score += 1
-                        is_corrects.append(False)
                     total_score += 2
-                details[str(index)] = {
-                    'pred': pred,
-                    'refr': refr,
-                    'is_correct': all(is_corrects),
-                }
-
+            return {'score': correct_score / total_score * 100}
         else:
-            details = {}
             correct_score, total_score = 0, 0
-            for index, (pred, refr) in enumerate(zip(predictions, references)):
+            for pred, refr in zip(predictions, references):
                 if self.question_type == 'multi_question_choice':
                     pred = self.do_predictions_postprocess(pred, len(refr))
                 else:
                     pred = self.do_predictions_postprocess(pred)
                 pred = self.ensure_same_length(pred, refr)
-                is_corrects = []
                 for p, r in zip(pred, refr):
-                    is_correct = p == r
-                    correct_score += is_correct
+                    if p == r:
+                        correct_score += 1
                     total_score += 1
-                    is_corrects.append(is_correct)
-                details[str(index)] = {
-                    'pred': pred,
-                    'refr': refr,
-                    'is_correct': all(is_corrects),
-                }
-        return {'score': correct_score / total_score * 100, 'details': details}
+            return {'score': correct_score / total_score * 100}
 
 
 for question_type in valid_gaokao_bench_question_types:

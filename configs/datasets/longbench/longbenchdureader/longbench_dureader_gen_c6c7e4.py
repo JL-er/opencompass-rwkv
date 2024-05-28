@@ -15,7 +15,7 @@ LongBench_dureader_infer_cfg = dict(
         type=PromptTemplate,
         template=dict(
             round=[
-                dict(role='HUMAN', prompt='请基于给定的文章回答下述问题。\n\n文章：{context}\n\n请基于上述文章回答下面的问题。\n\n问题：{input}\n回答：'),
+                dict(role='HUMAN', prompt='User: 请基于给定的文章回答下述问题。\n\n文章：{context}\n\n请基于上述文章回答下面的问题。\n\n问题：{input}\n\nAssistant:'),
             ], )),
     retriever=dict(type=ZeroRetriever),
     inferencer=dict(type=GenInferencer, max_out_len=128)

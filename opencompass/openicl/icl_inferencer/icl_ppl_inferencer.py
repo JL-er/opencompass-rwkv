@@ -52,7 +52,6 @@ class PPLInferencer(BaseInferencer):
             output_json_filepath=output_json_filepath,
             **kwargs,
         )
-
         self.labels = labels
 
     def inference(self,
@@ -83,7 +82,6 @@ class PPLInferencer(BaseInferencer):
                                           prompt_template=prompt_template)
         else:
             labels = self.labels
-
         # 4. Generate in-context examples for testing inputs
         for idx in range(len(ice_idx_list)):
             ice.append(retriever.generate_ice(ice_idx_list[idx], ice_template=ice_template))
